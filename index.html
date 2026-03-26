@@ -903,7 +903,7 @@ function copiarPix() {
 function adminLogin() {
   const u = document.getElementById('admin-user').value;
   const p = document.getElementById('admin-pass').value;
-  if (u === 'admin' && p === 'admin123') {
+  if (u === 'admin' && p === '212003') {
     document.getElementById('admin-login-section').style.display = 'none';
     document.getElementById('dashboard').style.display = 'block';
     renderTable('todos');
@@ -916,6 +916,37 @@ function adminLogin() {
 function adminLogout() {
   document.getElementById('admin-login-section').style.display = 'block';
   document.getElementById('dashboard').style.display = 'none';
+}
+
+function excluirUsuario(id) {
+  if (confirm('Tem certeza que deseja excluir este registro?')) {
+    assinantes = assinantes.filter(a => a.id !== id);
+    renderTable(filtroCurrent);
+    atualizarKPIs();
+    atualizarStats();
+    mostrarToast('Usuário excluído localmente!');
+  }
+}
+
+function editarUsuario(id) {
+  const a = assinantes.find(x => x.id === id);
+  if (!a) return;
+  const novoNome = prompt('Editar Nome:', a.nome);
+  if (novoNome === null) return;
+  const novoEmail = prompt('Editar E-mail:', a.email);
+  if (novoEmail === null) return;
+  const novoValor = prompt('Editar Valor (R$):', a.valor);
+  if (novoValor === null) return;
+  
+  a.nome = novoNome.trim() || a.nome;
+  a.email = novoEmail.trim() || a.email;
+  const v = parseFloat(novoValor);
+  if (!isNaN(v) && v > 0) a.valor = v;
+
+  renderTable(filtroCurrent);
+  atualizarKPIs();
+  atualizarStats();
+  mostrarToast('Usuário editado localmente!');
 }
 
 function filtrar(btn, status) {
@@ -940,8 +971,10 @@ function renderTable(filtro) {
           ${a.status === 'pago' ? '✓' : a.status === 'pendente' ? '⏳' : '⚠'} ${a.status}
         </span>
       </td>
-      <td>
-        ${a.status !== 'pago' ? `<button class="btn-marcar" data-marcar="${a.id}" onclick="marcarPago('${a.id}')">Marcar pago</button>` : `<span style="color:var(--text-muted);font-size:12px">—</span>`}
+      <td style="display:flex; gap:6px; flex-wrap:wrap">
+        ${a.status !== 'pago' ? `<button class="btn-marcar" data-marcar="${a.id}" onclick="marcarPago('${a.id}')">Marcar pago</button>` : ``}
+        <button class="btn-marcar" style="border-color:var(--text-mid); color:var(--text-mid)" onclick="editarUsuario('${a.id}')">Editar</button>
+        <button class="btn-marcar" style="border-color:#C62828; color:#C62828" onclick="excluirUsuario('${a.id}')">Excluir</button>
       </td>
     </tr>
   `).join('') || `<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text-muted)">Nenhum registro encontrado.</td></tr>`;
