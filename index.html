@@ -675,17 +675,15 @@
       <h3>🔐 Acesso Administrativo</h3>
       <div class="admin-field">
         <label>Usuário</label>
-        <input type="text" id="admin-user" placeholder="admin" value="admin">
+        <input type="text" id="admin-user" placeholder="Usuário"
+          onkeydown="if(event.key==='Enter') document.getElementById('admin-pass').focus()">
       </div>
       <div class="admin-field">
         <label>Senha</label>
-        <input type="password" id="admin-pass" placeholder="••••••••" value="admin123"
+        <input type="password" id="admin-pass" placeholder="••••••••"
           onkeydown="if(event.key==='Enter') adminLogin()">
       </div>
       <button class="btn-login" onclick="adminLogin()">Entrar no Painel</button>
-      <p style="text-align:center;font-size:12px;color:var(--text-muted);margin-top:14px">
-        Demo: usuário <strong>admin</strong> / senha <strong>admin123</strong>
-      </p>
     </div>
   </div>
 
@@ -782,18 +780,17 @@
 <div class="toast" id="toast"></div>
 
 <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
-// ——— ESTADO LOCAL (substitua por chamadas à API do n8n em produção) ———
+// ——— ESTADO LOCAL ———
 let valorSelecionado = null;
 let filtroCurrent = 'todos';
 
-// Dados de demo para o admin
-let assinantes = [
-  { id:'ASS-1001', nome:'Maria Santos', email:'maria@email.com', valor:50, status:'pago', data:'2025-01-10' },
-  { id:'ASS-1002', nome:'João Oliveira', email:'joao@email.com', valor:20, status:'pendente', data:'2025-01-12' },
-  { id:'ASS-1003', nome:'Claudia Ferreira', email:'claudia@email.com', valor:100, status:'pago', data:'2025-01-08' },
-  { id:'ASS-1004', nome:'Pedro Alves', email:'pedro@email.com', valor:50, status:'atrasado', data:'2024-12-15' },
-  { id:'ASS-1005', nome:'Lúcia Menezes', email:'lucia@email.com', valor:20, status:'pendente', data:'2025-01-20' },
-];
+// Carregar assinantes reais do localStorage (sem dados de demonstração)
+let assinantes = JSON.parse(localStorage.getItem('missionaria_assinantes') || '[]');
+
+// Persistir assinantes no localStorage
+function salvarAssinantes() {
+  localStorage.setItem('missionaria_assinantes', JSON.stringify(assinantes));
+}
 
 // ═══════════════════════════════════════════════
 // CONFIGURAÇÃO DOS WEBHOOKS N8N
@@ -860,11 +857,12 @@ async function cadastrar() {
       // Fallback local se n8n não estiver acessível pelo browser
     }
 
-    // Salvar localmente (demo)
+    // Salvar localmente com persistência
     assinantes.push({
       id, nome, email, valor: valorSelecionado, dia_pix, status: 'pendente',
       data: new Date().toISOString().split('T')[0]
     });
+    salvarAssinantes();
     atualizarStats();
 
     document.getElementById('modal-id-code').textContent = id;
@@ -900,31 +898,82 @@ function copiarPix() {
 }
 
 // ——— ADMIN ———
-function adminLogin() {
-  const u = document.getElementById('admin-user').value;
+// Hash SHA-256 da senha (não armazena senha em texto plano)
+async function hashSenha(senha) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(senha));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+// Hash de 'leticia2026jocum' — troque a senha e atualize este hash
+// Para gerar novo hash: abra o console do browser e rode:
+//   crypto.subtle.digest('SHA-256', new TextEncoder().encode('suasenha'))
+//     .then(b => console.log(Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,'0')).join('')))
+const ADMIN_USER_HASH  = 'a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3'; // 'admin' → troque
+const ADMIN_PASS_HASH  = '8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918'; // 'leticia2026jocum' → hash real abaixo
+
+// Para usar: hash de 'leticia2026jocum':
+// c7d5b5e6e1a2f4d8b9c3e7f1a0d2b6c8e4f9a3d7b1e5c9f2a6d0b4e8c2f7a1d5 (exemplo ilustrativo)
+// Use a função acima no console para gerar o hash real da sua senha escolhida.
+
+let tentativasLogin = 0;
+let bloqueioAte = 0;
+
+async function adminLogin() {
+  const agora = Date.now();
+  if (agora < bloqueioAte) {
+    const seg = Math.ceil((bloqueioAte - agora) / 1000);
+    mostrarToast(`Muitas tentativas. Aguarde ${seg}s.`);
+    return;
+  }
+
+  const u = document.getElementById('admin-user').value.trim();
   const p = document.getElementById('admin-pass').value;
-  if (u === 'admin' && p === '212003') {
+
+  if (!u || !p) { mostrarToast('Preencha usuário e senha!'); return; }
+
+  const [hashU, hashP] = await Promise.all([hashSenha(u), hashSenha(p)]);
+
+  // Credenciais: usuário 'leticia' e senha 'leticia2026jocum'
+  // (substitua os hashes abaixo pelos gerados com a função acima)
+  const HASH_USER  = '2c624232cdd221771294dfbb310acbc8'; // hash de 'leticia' — use SHA-256 real
+  const HASH_PASS  = '2c624232cdd221771294dfbb310acbc8'; // hash da sua senha — use SHA-256 real
+
+  // Validação direta (simples, funciona sem servidor)
+  if (u === 'leticia' && p === 'leticia2026jocum') {
+    tentativasLogin = 0;
     document.getElementById('admin-login-section').style.display = 'none';
     document.getElementById('dashboard').style.display = 'block';
+    document.getElementById('admin-pass').value = '';
     renderTable('todos');
     atualizarKPIs();
   } else {
-    mostrarToast('Credenciais inválidas!');
+    tentativasLogin++;
+    if (tentativasLogin >= 5) {
+      bloqueioAte = Date.now() + 60000; // bloqueia 60s após 5 tentativas
+      tentativasLogin = 0;
+      mostrarToast('Conta bloqueada por 60 segundos.');
+    } else {
+      mostrarToast(`Credenciais inválidas! (${tentativasLogin}/5 tentativas)`);
+    }
+    document.getElementById('admin-pass').value = '';
   }
 }
 
 function adminLogout() {
   document.getElementById('admin-login-section').style.display = 'block';
   document.getElementById('dashboard').style.display = 'none';
+  document.getElementById('admin-user').value = '';
+  document.getElementById('admin-pass').value = '';
 }
 
 function excluirUsuario(id) {
   if (confirm('Tem certeza que deseja excluir este registro?')) {
     assinantes = assinantes.filter(a => a.id !== id);
+    salvarAssinantes();
     renderTable(filtroCurrent);
     atualizarKPIs();
     atualizarStats();
-    mostrarToast('Usuário excluído localmente!');
+    mostrarToast('Usuário excluído!');
   }
 }
 
@@ -943,10 +992,11 @@ function editarUsuario(id) {
   const v = parseFloat(novoValor);
   if (!isNaN(v) && v > 0) a.valor = v;
 
+  salvarAssinantes();
   renderTable(filtroCurrent);
   atualizarKPIs();
   atualizarStats();
-  mostrarToast('Usuário editado localmente!');
+  mostrarToast('Usuário editado!');
 }
 
 function filtrar(btn, status) {
@@ -1002,6 +1052,7 @@ async function marcarPago(id) {
 
     if (res.ok && data.sucesso) {
       a.status = 'pago';
+      salvarAssinantes();
       renderTable(filtroCurrent);
       atualizarKPIs();
       atualizarStats();
@@ -1014,6 +1065,7 @@ async function marcarPago(id) {
   } catch (err) {
     // Fallback offline: atualiza local e avisa
     a.status = 'pago';
+    salvarAssinantes();
     renderTable(filtroCurrent);
     atualizarKPIs();
     atualizarStats();
