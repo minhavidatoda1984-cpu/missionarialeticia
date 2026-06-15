@@ -845,35 +845,32 @@ async function cadastrar() {
   btn.textContent = '⏳ Enviando...';
 
   try {
-    // Tentativa de chamar o webhook n8n real
-    let id = 'ASS-' + Date.now();
-    try {
-      const res = await fetch(N8N_WEBHOOK, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nome, email, telefone, cidade, valor: valorSelecionado, dia_pix })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.id_assinante) id = data.id_assinante;
-      }
-    } catch(_) {
-      // Fallback local se n8n não estiver acessível pelo browser
+    const res = await fetch(N8N_WEBHOOK, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nome, email, telefone, cidade, valor: valorSelecionado, dia_pix })
+    });
+
+    if (!res.ok) {
+      throw new Error('HTTP ' + res.status);
     }
 
-    // Salvar localmente com persistência
-    assinantes.push({
-      id, nome, email, valor: valorSelecionado, dia_pix, status: 'pendente',
-      data: new Date().toISOString().split('T')[0]
-    });
-    salvarAssinantes();
-    atualizarStats();
+    const data = await res.json().catch(() => ({}));
+    const id = data.id_assinante || ('ASS-' + Date.now());
+
+    // Atualiza contador visível no hero (sem salvar no localStorage)
+    const totalEl = document.getElementById('total-mantenedores');
+    if (totalEl) {
+      const atual = parseInt(totalEl.textContent) || 0;
+      totalEl.textContent = atual + 1;
+    }
 
     document.getElementById('modal-id-code').textContent = id;
     document.getElementById('modal-sucesso').classList.add('open');
     limparForm();
   } catch(e) {
-    mostrarToast('Erro ao enviar. Tente novamente.');
+    console.error('Erro ao cadastrar:', e);
+    mostrarToast('❌ Erro ao enviar. Verifique sua conexão e tente novamente.');
   } finally {
     btn.disabled = false;
     btn.textContent = '✦ Confirmar minha contribuição mensal';
@@ -966,41 +963,58 @@ async function adminLogin() {
 
 async function carregarAssinantesDoServidor() {
   const btn = document.getElementById('btn-recarregar');
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = '⏳ Carregando...';
-  } else {
-    mostrarToast('Carregando mantenedores...');
+  const tbody = document.getElementById('admin-tbody');
+
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Carregando...'; }
+  if (tbody) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text-muted)">⏳ Buscando cadastros no servidor...</td></tr>`;
   }
-  
+
   try {
     const res = await fetch(N8N_LISTAR_WEBHOOK, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token_admin: ADMIN_TOKEN })
     });
-    if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data)) {
-        assinantes = data;
-        salvarAssinantes();
-        atualizarKPIs();
-        atualizarStats();
-        mostrarToast('✓ Mantenedores carregados com sucesso!');
-      } else {
-        mostrarToast('Erro: Resposta do servidor inválida.');
-      }
-    } else {
-      mostrarToast('Erro ao carregar dados do servidor n8n.');
+
+    if (!res.ok) {
+      throw new Error('HTTP ' + res.status + ' — verifique se o workflow "missionaria-listar" está ativo no n8n.');
     }
+
+    const data = await res.json();
+
+    if (!Array.isArray(data)) {
+      throw new Error('O webhook retornou formato inesperado: ' + JSON.stringify(data).slice(0, 100));
+    }
+
+    assinantes = data;
+    // Não salva no localStorage — a fonte da verdade é o n8n/planilha
+    atualizarKPIs();
+    atualizarStats();
+    renderTable(filtroCurrent);
+    mostrarToast('✓ ' + assinantes.length + ' cadastro(s) carregado(s) do servidor!');
+
   } catch (err) {
     console.error('Erro ao conectar ao n8n:', err);
-    mostrarToast('Erro de rede. Carregados dados locais.');
-  } finally {
-    if (btn) {
-      btn.disabled = false;
-      btn.textContent = '🔄 Recarregar';
+    // Mostra o erro na tabela para facilitar diagnóstico
+    if (tbody) {
+      tbody.innerHTML = `<tr><td colspan="7" style="padding:24px">
+        <div style="background:#FFF3E0;border:1px solid #E65100;border-radius:10px;padding:20px;color:#5A3D2B;">
+          <strong style="color:#E65100;">⚠️ Não foi possível carregar os cadastros do n8n</strong><br><br>
+          <strong>Erro:</strong> ${err.message}<br><br>
+          <strong>O que verificar no n8n:</strong><br>
+          1. O workflow <code>missionaria-listar</code> está <strong>ativo</strong>?<br>
+          2. O nó Webhook está em modo <strong>Production</strong> (não Test)?<br>
+          3. A URL correta é: <code>${N8N_LISTAR_WEBHOOK}</code><br><br>
+          <button onclick="carregarAssinantesDoServidor()" style="background:var(--earth);color:#fff;border:none;padding:10px 20px;border-radius:8px;cursor:pointer;font-family:'Lato',sans-serif;font-weight:700;">
+            🔄 Tentar novamente
+          </button>
+        </div>
+      </td></tr>`;
     }
+    mostrarToast('❌ Erro ao carregar do n8n. Veja detalhes na tabela.');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🔄 Recarregar'; }
   }
 }
 
@@ -1130,10 +1144,14 @@ function atualizarKPIs() {
 }
 
 function atualizarStats() {
+  // Só atualiza os contadores públicos se tiver dados do servidor
+  if (!assinantes || assinantes.length === 0) return;
   const ativos = assinantes.filter(a => a.status === 'pago').length;
-  const mensal = assinantes.filter(a => a.status === 'pago').reduce((s, a) => s + a.valor, 0);
-  document.getElementById('total-mantenedores').textContent = ativos;
-  document.getElementById('total-mensal').textContent = 'R$ ' + mensal;
+  const mensal = assinantes.filter(a => a.status === 'pago').reduce((s, a) => s + (parseFloat(a.valor) || 0), 0);
+  const totalEl = document.getElementById('total-mantenedores');
+  const mensalEl = document.getElementById('total-mensal');
+  if (totalEl) totalEl.textContent = ativos;
+  if (mensalEl) mensalEl.textContent = 'R$ ' + mensal.toLocaleString('pt-BR');
 }
 
 function exportarCSV() {
