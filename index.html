@@ -742,6 +742,7 @@
               <th>Valor</th>
               <th>Cadastro</th>
               <th>Status</th>
+              <th>Meses em Atraso</th>
               <th>Ação</th>
             </tr>
           </thead>
@@ -967,7 +968,7 @@ async function carregarAssinantesDoServidor() {
 
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Carregando...'; }
   if (tbody) {
-    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text-muted)">⏳ Buscando cadastros no servidor...</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--text-muted)">⏳ Buscando cadastros no servidor...</td></tr>`;
   }
 
   try {
@@ -998,7 +999,7 @@ async function carregarAssinantesDoServidor() {
     console.error('Erro ao conectar ao n8n:', err);
     // Mostra o erro na tabela para facilitar diagnóstico
     if (tbody) {
-      tbody.innerHTML = `<tr><td colspan="7" style="padding:24px">
+      tbody.innerHTML = `<tr><td colspan="8" style="padding:24px">
         <div style="background:#FFF3E0;border:1px solid #E65100;border-radius:10px;padding:20px;color:#5A3D2B;">
           <strong style="color:#E65100;">⚠️ Não foi possível carregar os cadastros do n8n</strong><br><br>
           <strong>Erro:</strong> ${err.message}<br><br>
@@ -1080,13 +1081,16 @@ function renderTable(filtro) {
           ${a.status === 'pago' ? '✓' : a.status === 'pendente' ? '⏳' : '⚠'} ${a.status}
         </span>
       </td>
+      <td>
+        ${a.meses_atraso ? `<span style="color:#C62828;font-weight:700;">${a.meses_atraso}</span>` : `<span style="color:var(--text-muted)">—</span>`}
+      </td>
       <td style="display:flex; gap:6px; flex-wrap:wrap">
         ${a.status !== 'pago' ? `<button class="btn-marcar" data-marcar="${a.id}" onclick="marcarPago('${a.id}')">Marcar pago</button>` : ``}
         <button class="btn-marcar" style="border-color:var(--text-mid); color:var(--text-mid)" onclick="editarUsuario('${a.id}')">Editar</button>
         <button class="btn-marcar" style="border-color:#C62828; color:#C62828" onclick="excluirUsuario('${a.id}')">Excluir</button>
       </td>
     </tr>
-  `).join('') || `<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text-muted)">Nenhum registro encontrado.</td></tr>`;
+  `).join('') || `<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--text-muted)">Nenhum registro encontrado.</td></tr>`;
 }
 
 async function marcarPago(id) {
