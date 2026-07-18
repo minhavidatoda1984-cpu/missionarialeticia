@@ -1097,6 +1097,21 @@ async function marcarPago(id) {
   const a = assinantes.find(x => x.id === id);
   if (!a) return;
 
+  let mesReferencia = null;
+  if (Array.isArray(a.meses_atraso_chaves) && a.meses_atraso_chaves.length > 0) {
+    const sugestao = a.meses_atraso_chaves[0];
+    const escolha = prompt(
+      a.nome + ' está em atraso nos meses: ' + a.meses_atraso_chaves.join(', ') + '.\n\nDigite qual mês está sendo pago agora (formato AAAA-MM):',
+      sugestao
+    );
+    if (escolha === null) return; // admin cancelou
+    if (!/^\d{4}-\d{2}$/.test(escolha.trim())) {
+      mostrarToast('Formato de mês inválido. Use AAAA-MM, ex: 2026-06');
+      return;
+    }
+    mesReferencia = escolha.trim();
+  }
+
   // Feedback imediato no botao
   const btn = document.querySelector('[data-marcar="' + id + '"]');
   if (btn) { btn.disabled = true; btn.textContent = 'Enviando...'; }
@@ -1108,6 +1123,7 @@ async function marcarPago(id) {
       body: JSON.stringify({
         id_assinante: id,
         token_admin: ADMIN_TOKEN,
+        mes_referencia: mesReferencia,
         observacao: 'Confirmado via painel admin - ' + new Date().toLocaleString('pt-BR')
       })
     });
