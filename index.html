@@ -804,6 +804,7 @@ const N8N_BASE = 'https://webhook.naturaisterravida.com.br/webhook';
 const N8N_WEBHOOK           = `${N8N_BASE}/missionaria-cadastro`;
 const N8N_CONFIRMAR_WEBHOOK = `${N8N_BASE}/missionaria-confirmar-pagamento`;
 const N8N_LISTAR_WEBHOOK    = `${N8N_BASE}/missionaria-listar`;
+const N8N_EXCLUIR_WEBHOOK   = `${N8N_BASE}/missionaria-excluir`;
 
 // Token de segurança — deve ser IGUAL ao configurado no nó
 // "Validar Token Admin" do workflow de confirmação no n8n
@@ -1026,14 +1027,36 @@ function adminLogout() {
   document.getElementById('admin-pass').value = '';
 }
 
-function excluirUsuario(id) {
-  if (confirm('Tem certeza que deseja excluir este registro?')) {
-    assinantes = assinantes.filter(a => a.id !== id);
-    salvarAssinantes();
-    renderTable(filtroCurrent);
-    atualizarKPIs();
-    atualizarStats();
-    mostrarToast('Usuário excluído!');
+async function excluirUsuario(id) {
+  const a = assinantes.find(x => x.id === id);
+  if (!a) return;
+  if (!confirm('Tem certeza que deseja excluir "' + a.nome + '"? Essa ação apaga a linha da planilha e não pode ser desfeita.')) return;
+
+  const btn = document.querySelector('[data-excluir="' + id + '"]');
+  if (btn) { btn.disabled = true; btn.textContent = 'Excluindo...'; }
+
+  try {
+    const res = await fetch(N8N_EXCLUIR_WEBHOOK, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id_assinante: id, token_admin: ADMIN_TOKEN })
+    });
+    const data = await res.json().catch(() => ({}));
+
+    if (res.ok && data.sucesso) {
+      assinantes = assinantes.filter(x => x.id !== id);
+      renderTable(filtroCurrent);
+      atualizarKPIs();
+      atualizarStats();
+      mostrarToast('✓ ' + a.nome + ' excluído da planilha!');
+    } else {
+      const msg = data.mensagem || ('HTTP ' + res.status);
+      mostrarToast('Erro n8n: ' + msg);
+      if (btn) { btn.disabled = false; btn.textContent = 'Excluir'; }
+    }
+  } catch (e) {
+    mostrarToast('Erro de conexão: ' + e.message);
+    if (btn) { btn.disabled = false; btn.textContent = 'Excluir'; }
   }
 }
 
@@ -1087,7 +1110,7 @@ function renderTable(filtro) {
       <td style="display:flex; gap:6px; flex-wrap:wrap">
         ${a.status !== 'pago' ? `<button class="btn-marcar" data-marcar="${a.id}" onclick="marcarPago('${a.id}')">Marcar pago</button>` : ``}
         <button class="btn-marcar" style="border-color:var(--text-mid); color:var(--text-mid)" onclick="editarUsuario('${a.id}')">Editar</button>
-        <button class="btn-marcar" style="border-color:#C62828; color:#C62828" onclick="excluirUsuario('${a.id}')">Excluir</button>
+        <button class="btn-marcar" data-excluir="${a.id}" style="border-color:#C62828; color:#C62828" onclick="excluirUsuario('${a.id}')">Excluir</button>
       </td>
     </tr>
   `).join('') || `<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--text-muted)">Nenhum registro encontrado.</td></tr>`;
